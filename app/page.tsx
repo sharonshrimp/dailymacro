@@ -81,7 +81,7 @@ export default function Home() {
   const [manualFood, setManualFood] = useState({ name: '', calories: '', protein: '', carbs: '', fiber: '', servingSize: '100', actualEat: '100' });
 
   const PROTEIN_GOAL = 100;
-  const CALORIE_GOAL = 2000;
+  const CALORIE_GOAL = 1500;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
@@ -228,7 +228,7 @@ export default function Home() {
             </div>
             <div>
               <div className="flex justify-between text-[10px] font-black uppercase mb-1.5 px-1 text-slate-400">
-                <span>Calorie Limit (2000)</span>
+                <span>Calorie Limit (1500)</span>
                 <span>{dayData.totals.calories} kcal</span>
               </div>
               <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
