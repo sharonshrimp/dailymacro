@@ -166,7 +166,6 @@ export default function Home() {
       newMyFoods = myFoods.map(f => f.id === editingFoodId ? foodItem : f);
     } else {
       newMyFoods = [foodItem, ...myFoods];
-      // 只有在「新增」時才自動加入今日 Log
       const ratio = Number(manualFood.actualEat) / foodItem.servingSize;
       addNutrients(foodItem.name, {
         calories: foodItem.calories * ratio,
@@ -228,12 +227,48 @@ export default function Home() {
         </div>
 
         {/* 搜尋與新增 */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-8">
           <input className="flex-1 px-6 py-4 bg-white shadow-sm rounded-2xl font-bold outline-none" placeholder="Search..." value={query} onChange={e => setQuery(e.target.value)} />
           <button onClick={() => { setEditingFoodId(null); setShowManual(true); }} className="bg-slate-900 text-white w-14 h-14 rounded-2xl font-black text-2xl">+</button>
         </div>
 
-        {/* 常用食材 */}
+        {/* --- 重點調整：Today's Logs 被拉到了上方 --- */}
+        <div className="mb-10">
+          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2 italic">Today's Logs</h3>
+          <div className="space-y-3">
+            {dayData.items.length === 0 ? (
+              <p className="text-center py-4 text-slate-300 font-bold italic text-sm">No records for today yet...</p>
+            ) : (
+              dayData.items.map((item: any) => (
+                <div key={item.id} className="bg-white/60 p-4 rounded-2xl flex justify-between items-center border border-white shadow-sm">
+                  <div>
+                    <p className="font-black text-slate-700 text-sm italic">{item.name}</p>
+                    <p className="text-[8px] font-bold text-slate-400">{item.weight}g · P: {item.protein}g · C: {item.carbs}g</p>
+                  </div>
+                  <button onClick={() => {
+                    const newItems = dayData.items.filter((i: any) => i.id !== item.id);
+                    const newHistory = {
+                      ...history,
+                      [selectedDate]: {
+                        totals: {
+                          calories: dayData.totals.calories - item.calories,
+                          protein: Math.round((dayData.totals.protein - item.protein) * 10) / 10,
+                          carbs: Math.round((dayData.totals.carbs - (item.carbs || 0)) * 10) / 10,
+                          fiber: Math.round((dayData.totals.fiber - (item.fiber || 0)) * 10) / 10,
+                        },
+                        items: newItems
+                      }
+                    };
+                    setHistory(newHistory);
+                    syncToCloud(newHistory, myFoods);
+                  }} className="text-slate-200 hover:text-red-400 font-bold p-2">✕</button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* --- 常用食材 Favorites 被移到了下方 --- */}
         <div className="mb-8">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2">Favorites</h3>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -249,36 +284,6 @@ export default function Home() {
               ))}
             </SortableContext>
           </DndContext>
-        </div>
-
-        {/* 今日記錄 */}
-        <div className="space-y-3">
-          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2 italic">Today's Logs</h3>
-          {dayData.items.map((item: any) => (
-            <div key={item.id} className="bg-white/60 p-4 rounded-2xl flex justify-between items-center border border-white">
-              <div>
-                <p className="font-black text-slate-700 text-sm italic">{item.name}</p>
-                <p className="text-[8px] font-bold text-slate-400">{item.weight}g · P: {item.protein}g · C: {item.carbs}g</p>
-              </div>
-              <button onClick={() => {
-                const newItems = dayData.items.filter((i: any) => i.id !== item.id);
-                const newHistory = {
-                  ...history,
-                  [selectedDate]: {
-                    totals: {
-                      calories: dayData.totals.calories - item.calories,
-                      protein: Math.round((dayData.totals.protein - item.protein) * 10) / 10,
-                      carbs: Math.round((dayData.totals.carbs - (item.carbs || 0)) * 10) / 10,
-                      fiber: Math.round((dayData.totals.fiber - (item.fiber || 0)) * 10) / 10,
-                    },
-                    items: newItems
-                  }
-                };
-                setHistory(newHistory);
-                syncToCloud(newHistory, myFoods);
-              }} className="text-slate-200 hover:text-red-400 font-bold">✕</button>
-            </div>
-          ))}
         </div>
 
         {/* 重量彈窗 */}
@@ -321,9 +326,9 @@ export default function Home() {
                   ))}
                 </div>
                 {!editingFoodId && (
-                  <div className="p-4 bg-emerald-50 rounded-3xl">
-                    <label className="text-[8px] font-black text-emerald-500 block mb-2 text-center italic uppercase">Actually Eaten (g)</label>
-                    <input required type="number" className="w-full bg-white p-3 rounded-xl font-black text-emerald-600 text-center outline-none" value={manualFood.actualEat} onChange={e => setManualFood({...manualFood, actualEat: e.target.value})} />
+                  <div className="p-4 bg-emerald-50 rounded-3xl text-center">
+                    <label className="text-[8px] font-black text-emerald-500 block mb-2 text-center italic uppercase tracking-widest">Actually Eaten (g)</label>
+                    <input required type="number" className="w-full bg-white p-3 rounded-xl font-black text-emerald-600 outline-none text-center" value={manualFood.actualEat} onChange={e => setManualFood({...manualFood, actualEat: e.target.value})} />
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3 mt-6">
