@@ -4,6 +4,25 @@ import { useState, useEffect } from 'react';
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, setDoc, onSnapshot } from "firebase/firestore";
 
+// --- 1. 引入拖曳相關套件 ---
+import {
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
 const firebaseConfig = {
   apiKey: "AIzaSyABcguF-gLkoJX2v1S7Q_bPNQaTQQFqfLM",
   authDomain: "myfitnesstracker-b7f16.firebaseapp.com",
@@ -17,6 +36,51 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// --- 2. 建立可拖曳的元件項目 ---
+function SortableFoodItem({ food, onSelect, onEdit, onDelete }: any) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: food.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 1,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2 group">
+      {/* 拖曳手把 */}
+      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-2 text-slate-300 hover:text-slate-500">
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 7h2v2H7V7zm0 4h2v2H7v-2zm4-4h2v2h-2V7zm0 4h2v2h-2v-2zM7 15h2v2H7v-2zm4 0h2v2h-2v-2z"/></svg>
+      </div>
+
+      <button onClick={() => onSelect(food)} className="flex-1 text-left p-4 bg-white border border-slate-100 rounded-2xl shadow-sm transition active:scale-95">
+        <div className="flex justify-between items-center">
+          <span className="font-bold text-slate-700">{food.name}</span>
+          <span className="text-[10px] text-slate-300 font-black">基準: {food.servingSize}g</span>
+        </div>
+        <div className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-tight">
+          P: {food.protein}g · C: {food.calories}kcal · F: {food.fiber}g
+        </div>
+      </button>
+
+      <div className="flex flex-col gap-1">
+        <button onClick={() => onEdit(food)} className="bg-blue-50 text-blue-400 p-2 rounded-xl hover:bg-blue-100">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+        </button>
+        <button onClick={() => onDelete(food.id)} className="bg-red-50 text-red-300 p-2 rounded-xl hover:bg-red-100">✕</button>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [query, setQuery] = useState('');
   const [dbLoading, setDbLoading] = useState(true);
@@ -27,12 +91,16 @@ export default function Home() {
   const [showManual, setShowManual] = useState(false);
   const [weight, setWeight] = useState('100');
   const [editingFoodId, setEditingFoodId] = useState<number | null>(null);
-  
   const [manualFood, setManualFood] = useState({ 
     name: '', calories: '', protein: '', carbs: '', fiber: '', servingSize: '100', actualEat: '100' 
   });
 
-  // 監聽雲端數據
+  // --- 3. 配置拖曳感應器 ---
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), // 避免誤點擊
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "trackers", "yi-ching-data"), (docSnap) => {
       if (docSnap.exists()) {
@@ -52,9 +120,20 @@ export default function Home() {
     }, { merge: true });
   };
 
+  // --- 4. 處理拖曳結束後的排序 ---
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = myFoods.findIndex((f) => f.id === active.id);
+      const newIndex = myFoods.findIndex((f) => f.id === over.id);
+      const newOrderedFoods = arrayMove(myFoods, oldIndex, newIndex);
+      setMyFoods(newOrderedFoods);
+      syncToCloud(history, newOrderedFoods);
+    }
+  };
+
   const dayData = history[selectedDate] || { totals: { calories: 0, protein: 0, carbs: 0, fiber: 0 }, items: [] };
 
-  // 計算搜尋結果 (僅針對 myFoods 進行過濾)
   const filteredFrequentFoods = myFoods.filter(food => 
     food.name.toLowerCase().includes(query.toLowerCase())
   );
@@ -70,7 +149,6 @@ export default function Home() {
       fiber: Math.round(data.fiber * 10) / 10,
       weight: data.weight
     };
-
     const newHistory = {
       ...history,
       [selectedDate]: {
@@ -165,7 +243,6 @@ export default function Home() {
         syncToCloud(history, newMyFoods);
       }
     }
-
     setManualFood({ name: '', calories: '', protein: '', carbs: '', fiber: '', servingSize: '100', actualEat: '100' });
     setShowManual(false);
   };
@@ -176,7 +253,7 @@ export default function Home() {
     <main className="min-h-screen bg-slate-50 p-4 pb-24 font-sans text-slate-900">
       <div className="max-w-md mx-auto">
         
-        {/* 日期區塊 */}
+        {/* 日期區塊、看板、今日內容略 (保持不變) */}
         <div className="flex items-center justify-between mb-6 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
           <button onClick={() => {const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d.toLocaleDateString('en-CA'))}} className="p-2 text-slate-400 font-bold">←</button>
           <div className="flex flex-col items-center">
@@ -186,7 +263,6 @@ export default function Home() {
           <button onClick={() => {const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d.toLocaleDateString('en-CA'))}} className="p-2 text-slate-400 font-bold">→</button>
         </div>
 
-        {/* 總量看板 */}
         <div className="bg-white rounded-[2.5rem] shadow-xl p-6 mb-6 border-b-4 border-blue-50">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-black text-slate-800">Daily Total</h2>
@@ -200,7 +276,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 今日內容 */}
         {dayData.items.length > 0 && (
           <div className="mb-8 px-2">
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 italic">Today's Log</h3>
@@ -218,49 +293,51 @@ export default function Home() {
           </div>
         )}
 
-        {/* 搜尋欄位 (現在只針對常用食材過濾) */}
+        {/* 搜尋欄位 */}
         <div className="flex gap-2 mb-4">
-          <input 
-            type="text" 
-            className="flex-1 p-4 bg-white shadow-md rounded-2xl outline-none border border-transparent focus:border-blue-200" 
-            placeholder="搜尋常用食材..." 
-            value={query} 
-            onChange={(e) => setQuery(e.target.value)} 
-          />
+          <input type="text" className="flex-1 p-4 bg-white shadow-md rounded-2xl outline-none" placeholder="搜尋常用食材..." value={query} onChange={(e) => setQuery(e.target.value)} />
           <button onClick={() => { setEditingFoodId(null); setShowManual(true); }} className="bg-slate-900 text-white w-14 rounded-2xl font-bold shadow-md text-2xl">+</button>
         </div>
 
-        {/* 常用食材列表 (帶搜尋過濾) */}
+        {/* --- 5. 拖曳列表實作 --- */}
         <div className="mb-8 space-y-2">
           <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2 italic">
-            {query ? `Search Results (${filteredFrequentFoods.length})` : "Frequent Foods"}
+            {query ? `Search Results (${filteredFrequentFoods.length})` : "Frequent Foods (Drag to reorder)"}
           </h3>
-          {filteredFrequentFoods.length > 0 ? (
-            filteredFrequentFoods.map(food => (
-              <div key={food.id} className="flex items-center gap-2 group">
-                <button onClick={() => setSelectedFood(food)} className="flex-1 text-left p-4 bg-white border border-slate-100 rounded-2xl shadow-sm transition active:scale-95">
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-slate-700">{food.name}</span>
-                    <span className="text-[10px] text-slate-300 font-black">基準: {food.servingSize}g</span>
-                  </div>
-                  <div className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-tight">
-                    P: {food.protein}g · C: {food.calories}kcal · F: {food.fiber}g
-                  </div>
-                </button>
-                <div className="flex flex-col gap-1">
-                    <button onClick={() => handleEditMyFood(food)} className="bg-blue-50 text-blue-400 p-2 rounded-xl hover:bg-blue-100">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                    </button>
-                    <button onClick={() => { if(confirm("刪除常用食材?")) { const newF = myFoods.filter(f => f.id !== food.id); setMyFoods(newF); syncToCloud(history, newF); }}} className="bg-red-50 text-red-300 p-2 rounded-xl hover:bg-red-100">✕</button>
-                </div>
-              </div>
-            ))
-          ) : (
+          
+          <DndContext 
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext 
+              items={filteredFrequentFoods.map(f => f.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {filteredFrequentFoods.map(food => (
+                <SortableFoodItem 
+                  key={food.id} 
+                  food={food} 
+                  onSelect={setSelectedFood}
+                  onEdit={handleEditMyFood}
+                  onDelete={(id: number) => { 
+                    if(confirm("刪除常用食材?")) { 
+                      const newF = myFoods.filter(f => f.id !== id); 
+                      setMyFoods(newF); 
+                      syncToCloud(history, newF); 
+                    }
+                  }}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+
+          {filteredFrequentFoods.length === 0 && (
             <p className="text-center py-4 text-slate-300 text-xs font-bold uppercase tracking-widest">No frequent food found</p>
           )}
         </div>
 
-        {/* 彈窗 1: 秤重加入 */}
+        {/* 彈窗略 (保持不變) */}
         {selectedFood && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
@@ -275,14 +352,13 @@ export default function Home() {
                   const factor = Number(weight) / (selectedFood.servingSize || 100);
                   addNutrients(selectedFood.name, { calories: selectedFood.calories * factor, protein: selectedFood.protein * factor, carbs: selectedFood.carbs * factor, fiber: selectedFood.fiber * factor, weight: weight });
                   setSelectedFood(null); setWeight('100');
-                  setQuery(''); // 加入後清空搜尋
+                  setQuery('');
                 }} className="py-4 rounded-2xl font-bold text-white bg-blue-600 shadow-lg shadow-blue-200">確認加入</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* 彈窗 2: 手動輸入/編輯換算器 */}
         {showManual && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl overflow-y-auto max-h-[90vh]">
