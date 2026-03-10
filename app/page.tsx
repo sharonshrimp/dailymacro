@@ -54,7 +54,7 @@ function SortableFoodItem({ food, onSelect, onEdit, onDelete }: any) {
         <div className="flex gap-3 text-[10px] font-black uppercase tracking-tighter">
           <span className="text-indigo-500">P: {food.protein}g</span>
           <span className="text-amber-500">C: {food.calories}kcal</span>
-          <span className="text-emerald-500">Net Carbs: {food.carbs}g</span>
+          <span className="text-emerald-500">Carbs: {food.carbs}g</span>
         </div>
       </button>
 
@@ -81,7 +81,7 @@ export default function Home() {
   const [manualFood, setManualFood] = useState({ name: '', calories: '', protein: '', carbs: '', fiber: '', servingSize: '100', actualEat: '100' });
 
   const PROTEIN_GOAL = 100;
-  const CALORIE_GOAL = 2000; // 預設一個熱量目標做視覺對比
+  const CALORIE_GOAL = 2000;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
@@ -123,6 +123,12 @@ export default function Home() {
     syncToCloud(newHistory, myFoods);
   };
 
+  const changeDate = (offset: number) => {
+    const date = new Date(selectedDate);
+    date.setDate(date.getDate() + offset);
+    setSelectedDate(date.toLocaleDateString('en-CA'));
+  };
+
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const foodItem = { id: editingFoodId || Date.now(), name: manualFood.name, calories: Number(manualFood.calories), protein: Number(manualFood.protein), carbs: Number(manualFood.carbs), fiber: Number(manualFood.fiber), servingSize: Number(manualFood.servingSize) };
@@ -143,17 +149,39 @@ export default function Home() {
     setShowManual(true);
   };
 
-  if (dbLoading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center font-black text-indigo-400 italic animate-pulse">LOADING CORE...</div>;
+  if (dbLoading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center font-black text-indigo-400 italic animate-pulse">LOADING DASHBOARD...</div>;
 
   return (
     <main className="min-h-screen bg-[#F0F4F8] p-4 pb-24 font-sans text-slate-900">
       <div className="max-w-md mx-auto">
         
+        {/* --- 大標題 YC's DailyMacro --- */}
+        <header className="mb-6 pt-4 px-2">
+          <h1 className="text-3xl font-black italic tracking-tighter text-slate-800 drop-shadow-sm">
+            YC's <span className="text-indigo-600">DailyMacro</span>
+          </h1>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1 ml-1">Precision Nutrition Tracker</p>
+        </header>
+
+        {/* --- 日期選擇器 --- */}
+        <div className="bg-white rounded-[2rem] shadow-sm mb-6 p-2 flex items-center justify-between border border-slate-100">
+          <button onClick={() => changeDate(-1)} className="w-12 h-12 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full hover:bg-indigo-50 hover:text-indigo-500 transition-all font-bold">←</button>
+          <div className="relative flex items-center gap-2">
+            <span className="text-sm">📅</span>
+            <input 
+              type="date" 
+              className="font-black text-slate-700 bg-transparent outline-none cursor-pointer" 
+              value={selectedDate} 
+              onChange={(e) => setSelectedDate(e.target.value)} 
+            />
+          </div>
+          <button onClick={() => changeDate(1)} className="w-12 h-12 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full hover:bg-indigo-50 hover:text-indigo-500 transition-all font-bold">→</button>
+        </div>
+        
         {/* --- 視覺化 Dashboard --- */}
         <section className="bg-white rounded-[2.5rem] shadow-2xl p-6 mb-6 border border-white relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 opacity-50"></div>
           
-          {/* 四格營養素累積顯示 */}
           <div className="grid grid-cols-2 gap-3 mb-6 relative z-10">
             <div className="bg-indigo-50/50 p-4 rounded-3xl border border-indigo-100">
               <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-1">🔥 Calories</span>
@@ -185,12 +213,11 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 雙進度條追蹤 */}
           <div className="space-y-4 relative z-10">
             <div>
               <div className="flex justify-between text-[10px] font-black uppercase mb-1.5 px-1 text-slate-400">
-                <span>Protein Goal</span>
-                <span className={dayData.totals.protein >= PROTEIN_GOAL ? "text-indigo-600" : ""}>{Math.round(proteinProgress)}%</span>
+                <span>Protein Goal (100g)</span>
+                <span className={dayData.totals.protein >= PROTEIN_GOAL ? "text-indigo-600 font-black" : ""}>{Math.round(proteinProgress)}%</span>
               </div>
               <div className="h-4 w-full bg-slate-100 rounded-full p-1 border border-slate-50">
                 <div 
@@ -201,8 +228,8 @@ export default function Home() {
             </div>
             <div>
               <div className="flex justify-between text-[10px] font-black uppercase mb-1.5 px-1 text-slate-400">
-                <span>Calorie Limit</span>
-                <span>{dayData.totals.calories} / {CALORIE_GOAL}</span>
+                <span>Calorie Limit (2000)</span>
+                <span>{dayData.totals.calories} kcal</span>
               </div>
               <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                 <div 
@@ -227,11 +254,11 @@ export default function Home() {
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-4 ml-2">
             <span className="text-lg">📅</span>
-            <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] italic">Today's Logs</h3>
+            <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] italic">Daily Records</h3>
           </div>
           <div className="space-y-3">
             {dayData.items.length === 0 ? (
-              <div className="bg-white/40 border-2 border-dashed border-slate-200 rounded-3xl py-10 text-center text-slate-300 font-bold italic">No meals logged yet</div>
+              <div className="bg-white/40 border-2 border-dashed border-slate-200 rounded-3xl py-10 text-center text-slate-300 font-bold italic">Empty for this date</div>
             ) : (
               dayData.items.map((item: any) => (
                 <div key={item.id} className="bg-white p-4 rounded-[1.5rem] flex justify-between items-center shadow-sm border border-slate-50 group hover:shadow-md transition-all">
@@ -270,63 +297,51 @@ export default function Home() {
           </DndContext>
         </section>
 
-        {/* --- 彈窗系列 (視覺升級) --- */}
+        {/* 彈窗系列 (重量與新增編輯保持不變) */}
         {selectedFood && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-sm rounded-[3rem] p-8 shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
-              <div className="text-center mb-6">
-                <span className="text-4xl mb-2 block">⚖️</span>
-                <h3 className="text-xl font-black text-slate-800 italic">{selectedFood.name}</h3>
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Scale your intake</p>
-              </div>
-              <div className="bg-indigo-50 rounded-[2.5rem] p-10 mb-8 text-center border-2 border-indigo-100">
+            <div className="bg-white w-full max-w-sm rounded-[3rem] p-8 shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200 text-center">
+              <h3 className="text-xl font-black text-slate-800 italic mb-6">⚖️ {selectedFood.name}</h3>
+              <div className="bg-indigo-50 rounded-[2.5rem] p-10 mb-8 border-2 border-indigo-100">
                 <input autoFocus type="number" className="w-32 text-6xl font-black text-center bg-transparent border-b-4 border-indigo-500 outline-none text-indigo-600" value={weight} onChange={e => setWeight(e.target.value)} />
                 <span className="text-2xl font-black text-indigo-200 ml-2 italic">g</span>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => setSelectedFood(null)} className="py-5 font-black text-slate-400 bg-slate-50 rounded-2xl hover:bg-slate-100 transition-colors uppercase text-xs tracking-widest">Cancel</button>
+                <button onClick={() => setSelectedFood(null)} className="py-5 font-black text-slate-400 bg-slate-50 rounded-2xl">Cancel</button>
                 <button onClick={() => {
                   const r = Number(weight) / selectedFood.servingSize;
                   addNutrients(selectedFood.name, { calories: selectedFood.calories * r, protein: selectedFood.protein * r, carbs: selectedFood.carbs * r, fiber: selectedFood.fiber * r, weight: weight });
                   setSelectedFood(null); setWeight('100');
-                }} className="py-5 font-black text-white bg-indigo-600 rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all uppercase text-xs tracking-widest">Add Meal</button>
+                }} className="py-5 font-black text-white bg-indigo-600 rounded-2xl shadow-xl shadow-indigo-100">Add Meal</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* 新增/編輯彈窗 (視覺一致化) */}
         {showManual && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-[3rem] p-8 shadow-2xl max-h-[90vh] overflow-y-auto border border-white/20 animate-in slide-in-from-bottom-10">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="font-black text-2xl italic uppercase text-slate-800 tracking-tighter">
-                  {editingFoodId ? "Edit Item" : "New Food"}
-                </h3>
+                <h3 className="font-black text-2xl italic uppercase text-slate-800 tracking-tighter">{editingFoodId ? "Edit Item" : "New Food"}</h3>
                 <button onClick={() => { setShowManual(false); setEditingFoodId(null); }} className="text-slate-300 hover:text-slate-800 font-black text-xl">✕</button>
               </div>
               <form onSubmit={handleManualSubmit} className="space-y-5">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 block">Item Name</label>
-                  <input required className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-indigo-100 transition-all" value={manualFood.name} onChange={e => setManualFood({...manualFood, name: e.target.value})} placeholder="e.g. Chicken Breast" />
-                </div>
+                <input required className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-indigo-100 transition-all" value={manualFood.name} onChange={e => setManualFood({...manualFood, name: e.target.value})} placeholder="Item Name" />
                 <div className="grid grid-cols-2 gap-4 bg-indigo-50/30 p-5 rounded-[2rem] border border-indigo-50">
                   {['servingSize', 'calories', 'protein', 'carbs', 'fiber'].map(field => (
                     <div key={field} className={field === 'servingSize' ? 'col-span-2' : ''}>
                       <label className="text-[9px] font-black text-indigo-300 block mb-1 uppercase tracking-tighter">{field}</label>
-                      <input required type="number" step="0.1" className="w-full bg-white p-3 rounded-xl text-sm font-black outline-none border border-indigo-50" value={(manualFood as any)[field]} onChange={e => setManualFood({...manualFood, [field]: e.target.value})} />
+                      <input required type="number" step="0.1" className="w-full bg-white p-3 rounded-xl text-sm font-black outline-none" value={(manualFood as any)[field]} onChange={e => setManualFood({...manualFood, [field]: e.target.value})} />
                     </div>
                   ))}
                 </div>
                 {!editingFoodId && (
                   <div className="p-5 bg-emerald-50 rounded-[2rem] border border-emerald-100 text-center">
-                    <label className="text-[10px] font-black text-emerald-400 block mb-2 uppercase italic tracking-widest">Portion Eaten Now (g)</label>
+                    <label className="text-[10px] font-black text-emerald-400 block mb-2 uppercase italic">Portion Eaten (g)</label>
                     <input required type="number" className="w-full bg-white p-4 rounded-xl font-black text-emerald-600 outline-none text-center text-xl shadow-sm" value={manualFood.actualEat} onChange={e => setManualFood({...manualFood, actualEat: e.target.value})} />
                   </div>
                 )}
-                <button type="submit" className="w-full py-5 font-black text-white bg-slate-900 rounded-2xl shadow-xl hover:bg-indigo-600 transition-all uppercase text-xs tracking-[0.2em] mt-4">
-                  {editingFoodId ? "Update Favorite" : "Save & Add to Log"}
-                </button>
+                <button type="submit" className="w-full py-5 font-black text-white bg-slate-900 rounded-2xl shadow-xl hover:bg-indigo-600 transition-all uppercase text-xs tracking-[0.2em] mt-4">{editingFoodId ? "Update" : "Save & Add"}</button>
               </form>
             </div>
           </div>
