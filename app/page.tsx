@@ -19,8 +19,6 @@ const db = getFirestore(app);
 
 export default function Home() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [dbLoading, setDbLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [history, setHistory] = useState<any>({}); 
@@ -34,6 +32,7 @@ export default function Home() {
     name: '', calories: '', protein: '', carbs: '', fiber: '', servingSize: '100', actualEat: '100' 
   });
 
+  // 監聽雲端數據
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "trackers", "yi-ching-data"), (docSnap) => {
       if (docSnap.exists()) {
@@ -54,6 +53,11 @@ export default function Home() {
   };
 
   const dayData = history[selectedDate] || { totals: { calories: 0, protein: 0, carbs: 0, fiber: 0 }, items: [] };
+
+  // 計算搜尋結果 (僅針對 myFoods 進行過濾)
+  const filteredFrequentFoods = myFoods.filter(food => 
+    food.name.toLowerCase().includes(query.toLowerCase())
+  );
 
   const addNutrients = (name: string, data: any) => {
     const currentDay = history[selectedDate] || { totals: { calories: 0, protein: 0, carbs: 0, fiber: 0 }, items: [] };
@@ -104,7 +108,6 @@ export default function Home() {
     syncToCloud(newHistory);
   };
 
-  // 開啟編輯常用食材
   const handleEditMyFood = (food: any) => {
     setEditingFoodId(food.id);
     setManualFood({
@@ -114,7 +117,7 @@ export default function Home() {
       carbs: food.carbs.toString(),
       fiber: food.fiber.toString(),
       servingSize: food.servingSize.toString(),
-      actualEat: '100' // 編輯時預設為 100
+      actualEat: '100'
     });
     setShowManual(true);
   };
@@ -123,7 +126,6 @@ export default function Home() {
     e.preventDefault();
     const ratio = Number(manualFood.actualEat) / Number(manualFood.servingSize);
     
-    // 如果是編輯模式，先更新常用清單
     if (editingFoodId) {
       const updatedMyFoods = myFoods.map(f => f.id === editingFoodId ? {
         ...f,
@@ -138,7 +140,6 @@ export default function Home() {
       syncToCloud(history, updatedMyFoods);
       setEditingFoodId(null);
     } else {
-      // 新增模式
       const nutrients = {
         calories: Number(manualFood.calories) * ratio,
         protein: Number(manualFood.protein) * ratio,
@@ -217,22 +218,25 @@ export default function Home() {
           </div>
         )}
 
-        {/* 搜尋欄位 */}
+        {/* 搜尋欄位 (現在只針對常用食材過濾) */}
         <div className="flex gap-2 mb-4">
-          <input type="text" className="flex-1 p-4 bg-white shadow-md rounded-2xl outline-none" placeholder="搜尋食材..." value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (async () => {
-            setLoading(true);
-            const res = await fetch(`/api/food/search?query=${encodeURIComponent(query)}`);
-            setResults(await res.json());
-            setLoading(false);
-          })()} />
+          <input 
+            type="text" 
+            className="flex-1 p-4 bg-white shadow-md rounded-2xl outline-none border border-transparent focus:border-blue-200" 
+            placeholder="搜尋常用食材..." 
+            value={query} 
+            onChange={(e) => setQuery(e.target.value)} 
+          />
           <button onClick={() => { setEditingFoodId(null); setShowManual(true); }} className="bg-slate-900 text-white w-14 rounded-2xl font-bold shadow-md text-2xl">+</button>
         </div>
 
-        {/* 常用食材 (改為垂直列表) */}
-        {myFoods.length > 0 && (
-          <div className="mb-8 space-y-2">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2 italic">Frequent Foods</h3>
-            {myFoods.map(food => (
+        {/* 常用食材列表 (帶搜尋過濾) */}
+        <div className="mb-8 space-y-2">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2 italic">
+            {query ? `Search Results (${filteredFrequentFoods.length})` : "Frequent Foods"}
+          </h3>
+          {filteredFrequentFoods.length > 0 ? (
+            filteredFrequentFoods.map(food => (
               <div key={food.id} className="flex items-center gap-2 group">
                 <button onClick={() => setSelectedFood(food)} className="flex-1 text-left p-4 bg-white border border-slate-100 rounded-2xl shadow-sm transition active:scale-95">
                   <div className="flex justify-between items-center">
@@ -250,18 +254,10 @@ export default function Home() {
                     <button onClick={() => { if(confirm("刪除常用食材?")) { const newF = myFoods.filter(f => f.id !== food.id); setMyFoods(newF); syncToCloud(history, newF); }}} className="bg-red-50 text-red-300 p-2 rounded-xl hover:bg-red-100">✕</button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* 搜尋結果 */}
-        <div className="space-y-4">
-          {loading ? <p className="text-center text-slate-400 font-bold">搜尋中...</p> : results.map((food: any) => (
-            <div key={food.id} onClick={() => setSelectedFood(food)} className="p-5 rounded-3xl bg-white shadow-sm border border-slate-100 cursor-pointer">
-              <h3 className="font-bold text-slate-800">{food.name}</h3>
-              <p className="text-[10px] font-black text-slate-300 uppercase">{food.brand} • 基準: {food.servingSize}g</p>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="text-center py-4 text-slate-300 text-xs font-bold uppercase tracking-widest">No frequent food found</p>
+          )}
         </div>
 
         {/* 彈窗 1: 秤重加入 */}
@@ -279,6 +275,7 @@ export default function Home() {
                   const factor = Number(weight) / (selectedFood.servingSize || 100);
                   addNutrients(selectedFood.name, { calories: selectedFood.calories * factor, protein: selectedFood.protein * factor, carbs: selectedFood.carbs * factor, fiber: selectedFood.fiber * factor, weight: weight });
                   setSelectedFood(null); setWeight('100');
+                  setQuery(''); // 加入後清空搜尋
                 }} className="py-4 rounded-2xl font-bold text-white bg-blue-600 shadow-lg shadow-blue-200">確認加入</button>
               </div>
             </div>
